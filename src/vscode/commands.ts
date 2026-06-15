@@ -10,22 +10,32 @@ export function registerCommands(
   ui: CommentsUI,
   tree: ReviewTree,
 ): void {
-  const refreshAll = () => {
+  const renderNow = () => {
     const name = service.active();
     ui.render(name ? service.view(name) : { version: 1, name: '', createdAt: '', threads: [] });
     tree.refresh();
   };
 
+  // Coalesce render bursts: a user action appends to the log, which also fires
+  // the file watcher; debouncing merges both into one render and satisfies the
+  // spec's "debounced" re-anchoring on save.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleRender = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(renderNow, 100);
+  };
+  context.subscriptions.push({ dispose: () => { if (timer) clearTimeout(timer); } });
+
   const reg = (id: string, fn: (...args: any[]) => any) =>
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
-  reg('review.refresh', refreshAll);
+  reg('review.refresh', scheduleRender);
 
   reg('review.newReview', async () => {
     const name = await vscode.window.showInputBox({ prompt: 'Review name', placeHolder: 'auth-refactor' });
     if (!name) return;
     service.createReview(name.trim());
-    refreshAll();
+    scheduleRender();
   });
 
   reg('review.switchActive', async () => {
@@ -37,7 +47,7 @@ export function registerCommands(
     const pick = await vscode.window.showQuickPick(names, { placeHolder: 'Activate review' });
     if (!pick) return;
     service.setActive(pick);
-    refreshAll();
+    scheduleRender();
   });
 
   reg('review.deleteReview', async (node?: { name?: string }) => {
@@ -46,7 +56,7 @@ export function registerCommands(
     const ok = await vscode.window.showWarningMessage(`Delete review "${name}"?`, { modal: true }, 'Delete');
     if (ok !== 'Delete') return;
     service.deleteReview(name);
-    refreshAll();
+    scheduleRender();
   });
 
   reg('review.addComment', async () => {
@@ -75,27 +85,27 @@ export function registerCommands(
       body,
       ts: nowIso(),
     });
-    refreshAll();
+    scheduleRender();
   });
 
   reg('review.replySubmit', async (reply: vscode.CommentReply) => {
     const threadId = ui.threadIdFor(reply.thread);
     if (!threadId) return;
     service.apply({ op: 'reply', thread: threadId, author: 'reviewer', body: reply.text, ts: nowIso() });
-    refreshAll();
+    scheduleRender();
   });
 
   reg('review.resolve', (thread: vscode.CommentThread) => {
     const threadId = ui.threadIdFor(thread);
     if (!threadId) return;
     service.apply({ op: 'resolve', thread: threadId, ts: nowIso() });
-    refreshAll();
+    scheduleRender();
   });
 
   reg('review.reopen', (thread: vscode.CommentThread) => {
     const threadId = ui.threadIdFor(thread);
     if (!threadId) return;
     service.apply({ op: 'reopen', thread: threadId, ts: nowIso() });
-    refreshAll();
+    scheduleRender();
   });
 }

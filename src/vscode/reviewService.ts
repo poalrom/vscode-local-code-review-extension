@@ -24,13 +24,14 @@ export class ReviewService {
 
   createReview(name: string): void {
     storage.ensureLog(this.dir, name);
-    storage.writeView(this.dir, name, { version: 1, name, createdAt: '', threads: [] });
+    storage.writeView(this.dir, name, this.view(name));
     this.setActive(name);
   }
 
   deleteReview(name: string): void {
+    const wasActive = this.active();
     storage.removeReview(this.dir, name);
-    if (this.active() === name) {
+    if (wasActive === name) {
       const remaining = this.list();
       storage.writeState(this.dir, { active: remaining[0] ?? null });
     }

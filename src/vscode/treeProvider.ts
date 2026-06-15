@@ -29,14 +29,17 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
     if (node.kind === 'thread') {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
       item.description = `${node.file}:${node.line}`;
-      item.command = {
-        command: 'vscode.open',
-        title: 'Open',
-        arguments: [
-          vscode.Uri.joinPath(workspaceRoot(), node.file),
-          { selection: new vscode.Range(node.line - 1, 0, node.line - 1, 0) },
-        ],
-      };
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (root) {
+        item.command = {
+          command: 'vscode.open',
+          title: 'Open',
+          arguments: [
+            vscode.Uri.joinPath(root, node.file),
+            { selection: new vscode.Range(node.line - 1, 0, node.line - 1, 0) },
+          ],
+        };
+      }
       return item;
     }
     return new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
@@ -66,10 +69,4 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
     }
     return [];
   }
-}
-
-function workspaceRoot(): vscode.Uri {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) throw new Error('No workspace folder open.');
-  return folder.uri;
 }

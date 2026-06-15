@@ -65,6 +65,23 @@ printf '%s\n' "$(jq -nc --arg t t_a1 --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{op:"reopen", thread:$t, ts:$ts}')" >> "$log"
 ```
 
+## If the view looks stale
+
+The extension keeps `<name>.view.json` current. If it ever looks behind the log
+(e.g. the extension is not running), reconstruct the current state by folding the
+log yourself — the log is the source of truth:
+
+```bash
+jq -s '
+  reduce .[] as $e ({};
+    if $e.op == "add_thread" then .[$e.id] = {id:$e.id, file:$e.file, range:$e.range, snapshot:$e.snapshot, status:"open", comments:[{author:$e.author, body:$e.body}]}
+    elif $e.op == "reply"   then .[$e.thread].comments += [{author:$e.author, body:$e.body}]
+    elif $e.op == "resolve" then .[$e.thread].status = "resolved"
+    elif $e.op == "reopen"  then .[$e.thread].status = "open"
+    else . end)
+  | to_entries | map(.value)' ".review/$f.log.jsonl"
+```
+
 ## Rules
 
 - Read `view.json`, write only by appending to `log.jsonl`.

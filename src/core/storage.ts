@@ -68,3 +68,9 @@ export function listReviews(dir: string): string[] {
     .map((f) => f.slice(0, -suffix.length))
     .sort();
 }
+
+export function removeReview(dir: string, name: string): void {
+  for (const p of [logPath(dir, name), viewPath(dir, name)]) {
+    if (fs.existsSync(p)) fs.rmSync(p);
+  }
+}

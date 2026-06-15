@@ -54,4 +54,12 @@ describe('storage', () => {
     storage.ensureLog(dir, 'alpha');
     expect(storage.listReviews(dir)).toEqual(['alpha', 'beta']);
   });
+
+  it('removes a review log and view', () => {
+    storage.ensureLog(dir, 'rev');
+    storage.writeView(dir, 'rev', { version: 1, name: 'rev', createdAt: '', threads: [] });
+    storage.removeReview(dir, 'rev');
+    expect(storage.listReviews(dir)).toEqual([]);
+    expect(fs.existsSync(storage.viewPath(dir, 'rev'))).toBe(false);
+  });
 });

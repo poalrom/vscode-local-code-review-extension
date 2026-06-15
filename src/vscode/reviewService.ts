@@ -41,6 +41,16 @@ export class ReviewService {
     return fold(name, storage.readLog(this.dir, name));
   }
 
+  // Recompute and persist the active review's view. Safe to call on every
+  // render — used to keep view.json current after external (agent) log writes.
+  refreshView(): ReviewView | null {
+    const name = this.active();
+    if (!name) return null;
+    const v = this.view(name);
+    storage.writeView(this.dir, name, v);
+    return v;
+  }
+
   // Append an event to the active review, rebuild + persist the view, return it.
   apply(event: ReviewEvent): ReviewView {
     const name = this.active();

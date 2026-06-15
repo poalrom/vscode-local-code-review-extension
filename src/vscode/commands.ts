@@ -11,8 +11,8 @@ export function registerCommands(
   tree: ReviewTree,
 ): void {
   const renderNow = () => {
-    const name = service.active();
-    ui.render(name ? service.view(name) : { version: 1, name: '', createdAt: '', threads: [] });
+    const view = service.refreshView();
+    ui.render(view ?? { version: 1, name: '', createdAt: '', threads: [] });
     tree.refresh();
   };
 

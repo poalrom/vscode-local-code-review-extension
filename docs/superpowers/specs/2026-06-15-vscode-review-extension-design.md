@@ -10,6 +10,24 @@ on any line of any file. Review output is stored in the workspace as structured
 data so AI coding agents can read open comments, act on them, reply, and resolve
 them — a tight human-reviews → agent-acts loop.
 
+## Use cases
+
+Concrete situations the design is tested against (Zen #11):
+
+1. **Reviewer flags a bug.** Selects lines 42–45 in `login.ts`, runs "Add
+   Comment", types feedback. A thread appears in the gutter and the sidebar.
+2. **Agent addresses feedback.** Without being told which file, the agent
+   discovers the active review, lists open threads, edits the code, replies
+   "fixed", and resolves the thread. Reviewer sees the reply appear live.
+3. **Code drifts under a comment.** Reviewer (or agent) edits the file; the
+   commented lines move or vanish. Threads relocate automatically where the
+   snapshot still matches, and are flagged `outdated` (never lost) where it
+   doesn't.
+4. **Reviewer and agent act at the same time.** Reviewer adds a comment while
+   the agent resolves another. Neither write clobbers the other.
+5. **Reviewer runs several reviews.** Switches the active review between an
+   `auth-refactor` pass and a `perf` pass; new comments land in the active one.
+
 ## Scope (v1)
 
 - **In:** Ad-hoc commenting (any file, any line range), threaded comments with
@@ -187,6 +205,39 @@ Solved structurally by the append-only log:
 - Extension is the **sole writer** of `<name>.view.json`.
 - No locks, no read-modify-write of shared mutable state → no lost updates.
 - Log compaction deferred (reviews are short-lived; log grows slowly).
+
+## Decisions & rejected alternatives
+
+Recorded so the motivation survives the decision (Zen #14).
+
+- **Storage = append-only event log, not a single mutable JSON.**
+  Rejected a single mutable JSON document: two writers (extension + agent) doing
+  read-modify-write lose updates (Zen #8 — mutable shared state is the enemy).
+  Rejected a lock file around the mutable JSON: requires a shell agent and a
+  Node extension to honor the same advisory lock consistently, leaks stale locks
+  on crash, and pushes retry logic into the jq skill — an interface that is hard
+  to implement correctly everywhere (Zen #7). The append-only log makes the race
+  impossible by construction instead of guarding against it.
+
+- **Materialized view is derived, not a second source of truth.**
+  The `<name>.view.json` is a read model: fully reproducible by folding the log,
+  written only by the extension, never edited by agents. It is not independent
+  state — it earns its place by keeping the common case (agents reading) a plain
+  `jq` over nested JSON instead of a fold (Zen #11). If it and the log ever
+  disagree, the log wins and the view is regenerated.
+
+- **Single active review + pointer file, not per-thread files or a fixed
+  filename.** Per-thread files scatter one review across many files (Zen #3).
+  A fixed `active.json` filename forces a rename dance on every switch and loses
+  the review's name from its content. A separate `state.json` pointer makes a
+  switch one atomic write and keeps review files clean. Active lives on disk (not
+  VSCode memory) because the agent must discover the target unprompted.
+
+- **Diff mode and Zed support deferred, not designed-in now.**
+  Good design begins with deciding what the system will not support (Zen #4).
+  Zed's extension API cannot render comment-thread UI today; forcing parity would
+  compromise the VSCode experience. The VSCode-agnostic core leaves the door open
+  for an LSP-based Zed adapter without committing to it now.
 
 ## UI surface
 

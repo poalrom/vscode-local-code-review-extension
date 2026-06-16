@@ -29,16 +29,31 @@ export function registerCommands(
   const reg = (id: string, fn: (...args: any[]) => any) =>
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
-  // Ensure a review is active, prompting to create one (with a collision-safe
-  // default name) when there isn't. Returns false if the user cancels.
-  const ensureActiveReview = async (): Promise<boolean> => {
-    if (service.active()) return true;
+  // Ensure a review is active. When none is active but others exist, let the
+  // user activate an existing one or create a new one; with no reviews at all,
+  // go straight to naming a new one. Returns false if the user cancels.
+  const createReview = async (): Promise<boolean> => {
     const name = await vscode.window.showInputBox({
-      prompt: 'No active review. Name a new review for this comment',
+      prompt: 'Name a new review for this comment',
       value: service.suggestReviewName(),
     });
     if (!name) return false;
     service.createReview(name.trim());
+    return true;
+  };
+
+  const ensureActiveReview = async (): Promise<boolean> => {
+    if (service.active()) return true;
+    const existing = service.list();
+    if (existing.length === 0) return createReview();
+
+    const CREATE = 'Create new review…';
+    const pick = await vscode.window.showQuickPick([CREATE, ...existing], {
+      placeHolder: 'No active review — activate one or create a new review for this comment',
+    });
+    if (!pick) return false;
+    if (pick === CREATE) return createReview();
+    service.setActive(pick);
     return true;
   };
 

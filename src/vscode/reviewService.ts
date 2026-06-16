@@ -28,6 +28,18 @@ export class ReviewService {
     this.setActive(name);
   }
 
+  // A date-based default review name that doesn't collide with an existing one.
+  // Used when a comment is added with no active review and we offer a name to create.
+  suggestReviewName(): string {
+    const base = `review-${nowIso().slice(0, 10)}`;
+    const existing = new Set(this.list());
+    if (!existing.has(base)) return base;
+    for (let i = 2; ; i++) {
+      const candidate = `${base}-${i}`;
+      if (!existing.has(candidate)) return candidate;
+    }
+  }
+
   deleteReview(name: string): void {
     const wasActive = this.active();
     storage.removeReview(this.dir, name);

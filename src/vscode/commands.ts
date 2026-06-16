@@ -29,6 +29,19 @@ export function registerCommands(
   const reg = (id: string, fn: (...args: any[]) => any) =>
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
+  // Ensure a review is active, prompting to create one (with a collision-safe
+  // default name) when there isn't. Returns false if the user cancels.
+  const ensureActiveReview = async (): Promise<boolean> => {
+    if (service.active()) return true;
+    const name = await vscode.window.showInputBox({
+      prompt: 'No active review. Name a new review for this comment',
+      value: service.suggestReviewName(),
+    });
+    if (!name) return false;
+    service.createReview(name.trim());
+    return true;
+  };
+
   reg('review.refresh', scheduleRender);
 
   reg('review.newReview', async () => {
@@ -62,10 +75,7 @@ export function registerCommands(
   reg('review.addComment', async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
-    if (!service.active()) {
-      vscode.window.showWarningMessage('No active review. Run "Code Review: New Review" first.');
-      return;
-    }
+    if (!(await ensureActiveReview())) return;
     const body = await vscode.window.showInputBox({ prompt: 'Comment' });
     if (!body) return;
 
@@ -90,8 +100,33 @@ export function registerCommands(
 
   reg('review.replySubmit', async (reply: vscode.CommentReply) => {
     const threadId = ui.threadIdFor(reply.thread);
-    if (!threadId) return;
-    service.apply({ op: 'reply', thread: threadId, author: 'reviewer', body: reply.text, ts: nowIso() });
+    if (threadId) {
+      service.apply({ op: 'reply', thread: threadId, author: 'reviewer', body: reply.text, ts: nowIso() });
+      scheduleRender();
+      return;
+    }
+    // Unbound thread = the user started a fresh comment from the gutter UI.
+    // Treat it as a new review thread, creating a review to hold it if needed.
+    if (!(await ensureActiveReview())) return;
+    const doc = await vscode.workspace.openTextDocument(reply.thread.uri);
+    const range = reply.thread.range ?? new vscode.Range(0, 0, 0, 0);
+    const startLine = range.start.line;
+    const endLine = range.end.line;
+    const snapshot = doc.getText(
+      new vscode.Range(startLine, 0, endLine, doc.lineAt(endLine).text.length),
+    );
+    service.apply({
+      op: 'add_thread',
+      id: newThreadId(),
+      file: vscode.workspace.asRelativePath(reply.thread.uri, false),
+      range: { startLine: startLine + 1, endLine: endLine + 1 },
+      snapshot,
+      author: 'reviewer',
+      body: reply.text,
+      ts: nowIso(),
+    });
+    // Drop the transient editor-created thread; render() recreates a bound one.
+    reply.thread.dispose();
     scheduleRender();
   });
 

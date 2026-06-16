@@ -54,16 +54,45 @@ describe('CommentsUI.render', () => {
     expect(alive().length).toBe(0);
   });
 
-  it('updates a changed thread in place without recreating it', () => {
+  it('updates a shifted thread in place without recreating it (no blink)', () => {
     const ui = new CommentsUI();
     ui.render(view([openThread()]));
-    const edited = openThread({
-      comments: [{ id: 't1.c1', author: 'reviewer', body: 'edited', createdAt: '2026-06-16T00:00:00.000Z' }],
-    });
-    ui.render(view([edited]));
+
+    // Insert a line above the comment: VSCode live-tracks the decoration, so we
+    // just move the range in place rather than dispose+recreate.
+    mock.state.textDocuments = [doc('a.ts', 'x\nl1\nl2\nl3\nl4\nl5\n')];
+    ui.render(view([openThread()]));
 
     expect(mock.state.createdThreads.length).toBe(1);
     expect(alive().length).toBe(1);
+    expect(mock.state.createdThreads[0].disposed).toBe(false);
+    expect((alive()[0].range as { start: { line: number } }).start.line).toBe(1);
+  });
+
+  it('recreates a thread when it flips out of the outdated state', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread()]));
+
+    // Snapshot vanishes -> entering outdated updates in place (still one thread).
+    mock.state.textDocuments = [doc('a.ts', 'gone\nl2\nl3\nl4\nl5\n')];
+    ui.render(view([openThread()]));
+    expect(mock.state.createdThreads.length).toBe(1);
+
+    // Snapshot reappears -> recreate so VSCode re-places the stranded widget.
+    mock.state.textDocuments = [doc('a.ts', 'l1\nl2\nl3\nl4\nl5\n')];
+    ui.render(view([openThread()]));
+    expect(mock.state.createdThreads.length).toBe(2);
+    expect(alive().length).toBe(1);
+    expect(mock.state.createdThreads[0].disposed).toBe(true);
+  });
+
+  it('leaves an unchanged thread untouched on repeated renders (no blink)', () => {
+    const ui = new CommentsUI();
+    const v = view([openThread()]);
+    ui.render(v);
+    ui.render(v);
+
+    expect(mock.state.createdThreads.length).toBe(1);
     expect(mock.state.createdThreads[0].disposed).toBe(false);
   });
 

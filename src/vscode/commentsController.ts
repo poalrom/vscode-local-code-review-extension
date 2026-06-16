@@ -11,6 +11,9 @@ export interface BoundThread {
   threadId: string;
   sig: string;
   status: ThreadStatus;
+  // Whether the thread last rendered as outdated (snapshot not found). A flip in
+  // this flag is the only transition that forces a dispose+recreate.
+  outdated: boolean;
 }
 
 export class CommentsUI {
@@ -70,40 +73,54 @@ export class CommentsUI {
         label: r.label,
         comments: t.comments.map((c) => [c.author, c.body]),
       });
-      const existing = this.bound.find((b) => b.threadId === id);
       const range = new vscode.Range(r.startLine, 0, r.endLine, 0);
+      const existing = this.bound.find((b) => b.threadId === id);
 
-      if (!existing) {
-        const vsThread = this.controller.createCommentThread(
-          uri,
-          range,
-          t.comments.map((c) => this.toComment(c.author, c.body)),
-        );
-        vsThread.label = r.label;
-        vsThread.contextValue = t.status;
-        vsThread.collapsibleState = collapsibleFor(t.status);
-        this.bound.push({ vsThread, threadId: id, sig, status: t.status });
+      // Nothing changed since the last render — leave the live widget alone.
+      if (existing && existing.sig === sig && existing.status === t.status) continue;
+
+      // VSCode live-tracks a thread's decoration through normal edits, so an
+      // in-place update keeps it correctly positioned without a blink. The one
+      // case its tracking can't recover is a thread leaving the outdated state
+      // (its snapshot reappears): the widget is stranded on a stale line, so the
+      // thread must be recreated to re-place it. Every other change updates in
+      // place to avoid blinking.
+      const leavingOutdated = !!existing && existing.outdated && !r.outdated;
+      if (existing && !leavingOutdated) {
+        existing.vsThread.range = range;
+        existing.vsThread.label = r.label;
+        existing.vsThread.contextValue = t.status;
+        existing.vsThread.comments = t.comments.map((c) => this.toComment(c.author, c.body));
+        if (existing.status !== t.status) {
+          existing.vsThread.collapsibleState = collapsibleFor(t.status);
+        }
+        existing.sig = sig;
+        existing.status = t.status;
+        existing.outdated = r.outdated;
         continue;
       }
 
-      // Nothing changed — leave the live widget (and its collapse state) alone.
-      if (existing.sig === sig && existing.status === t.status) continue;
-
-      existing.vsThread.range = range;
-      existing.vsThread.label = r.label;
-      existing.vsThread.contextValue = t.status;
-      existing.vsThread.comments = t.comments.map((c) => this.toComment(c.author, c.body));
-      // Only override the user's collapse state when the status itself flips.
-      if (existing.status !== t.status) {
-        existing.vsThread.collapsibleState = collapsibleFor(t.status);
+      if (existing) {
+        existing.vsThread.dispose();
+        this.bound = this.bound.filter((b) => b !== existing);
       }
-      existing.sig = sig;
-      existing.status = t.status;
+      const vsThread = this.controller.createCommentThread(
+        uri,
+        range,
+        t.comments.map((c) => this.toComment(c.author, c.body)),
+      );
+      vsThread.label = r.label;
+      vsThread.contextValue = t.status;
+      vsThread.collapsibleState = collapsibleFor(t.status);
+      this.bound.push({ vsThread, threadId: id, sig, status: t.status, outdated: r.outdated });
     }
   }
 
   // Anchor the thread in the current document text and derive its label.
-  private placement(lines: string[], t: Thread): { startLine: number; endLine: number; label: string } {
+  private placement(
+    lines: string[],
+    t: Thread,
+  ): { startLine: number; endLine: number; label: string; outdated: boolean } {
     const located = anchor(lines, t.range, t.snapshot);
     const outdated = located.kind === 'outdated';
     const range = outdated ? t.range : located.range;
@@ -111,6 +128,7 @@ export class CommentsUI {
       startLine: range.startLine - 1,
       endLine: range.endLine - 1,
       label: `${t.status === 'resolved' ? 'Resolved' : 'Open'}${outdated ? ' [outdated]' : ''}`,
+      outdated,
     };
   }
 

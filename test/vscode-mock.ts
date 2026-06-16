@@ -3,12 +3,17 @@
 // Extension Host. Only the surface used by commentsController.ts is modeled.
 
 export class Range {
+  readonly start: { line: number; character: number };
+  readonly end: { line: number; character: number };
   constructor(
     public readonly startLine: number,
     public readonly startCol: number,
     public readonly endLine: number,
     public readonly endCol: number,
-  ) {}
+  ) {
+    this.start = { line: startLine, character: startCol };
+    this.end = { line: endLine, character: endCol };
+  }
 }
 
 export class MarkdownString {

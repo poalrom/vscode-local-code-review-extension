@@ -30,11 +30,21 @@ export function appendEvent(dir: string, name: string, event: ReviewEvent): void
 export function readLog(dir: string, name: string): ReviewEvent[] {
   const p = logPath(dir, name);
   if (!fs.existsSync(p)) return [];
-  return fs
-    .readFileSync(p, 'utf8')
-    .split('\n')
-    .filter((l) => l.trim().length > 0)
-    .map((l) => JSON.parse(l) as ReviewEvent);
+  // The log is a multi-writer surface: agents append to it out-of-band, so a
+  // single malformed line (partial write, crash mid-append, hand-edit) must not
+  // take down the whole review. Skip lines that don't parse, warn, keep the rest.
+  const events: ReviewEvent[] = [];
+  const lines = fs.readFileSync(p, 'utf8').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.trim().length === 0) continue;
+    try {
+      events.push(JSON.parse(l) as ReviewEvent);
+    } catch (err) {
+      console.warn(`[review] skipping malformed log line ${i + 1} in ${p}: ${String(err)}`);
+    }
+  }
+  return events;
 }
 
 function writeAtomic(target: string, contents: string): void {
@@ -51,7 +61,15 @@ export function writeView(dir: string, name: string, view: ReviewView): void {
 export function readState(dir: string): ReviewState {
   const p = statePath(dir);
   if (!fs.existsSync(p)) return { active: null };
-  return JSON.parse(fs.readFileSync(p, 'utf8')) as ReviewState;
+  // A corrupt state.json must not make every command throw. Recover to "no
+  // active review" rather than propagating a parse error into the whole UI.
+  try {
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8')) as ReviewState;
+    return { active: typeof parsed.active === 'string' ? parsed.active : null };
+  } catch (err) {
+    console.warn(`[review] state.json unreadable, resetting active review: ${String(err)}`);
+    return { active: null };
+  }
 }
 
 export function writeState(dir: string, state: ReviewState): void {

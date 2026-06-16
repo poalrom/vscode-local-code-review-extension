@@ -4,6 +4,17 @@ import { CommentsUI } from './commentsController';
 import { ReviewTree } from './treeProvider';
 import { newThreadId } from '../core/ids';
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// Store snapshots with LF endings only. On CRLF files getText() yields '\r\n',
+// which would bake stray '\r' into view.json and break the agent's grep of the
+// raw snapshot against a normally-edited file.
+function normalizeSnapshot(text: string): string {
+  return text.replace(/\r\n/g, '\n');
+}
+
 export function registerCommands(
   context: vscode.ExtensionContext,
   service: ReviewService,
@@ -11,9 +22,15 @@ export function registerCommands(
   tree: ReviewTree,
 ): void {
   const renderNow = () => {
-    const view = service.refreshView();
-    ui.render(view ?? { version: 1, name: '', createdAt: '', threads: [] });
-    tree.refresh();
+    // Runs detached on a timer, so an unguarded throw here is swallowed by the
+    // host and leaves the panel silently stale. Surface it instead.
+    try {
+      const view = service.refreshView();
+      ui.render(view ?? { version: 1, name: '', createdAt: '', threads: [] });
+      tree.refresh();
+    } catch (err) {
+      vscode.window.showErrorMessage(`Code Review: failed to refresh — ${errMessage(err)}`);
+    }
   };
 
   // Coalesce render bursts: a user action appends to the log, which also fires
@@ -26,8 +43,19 @@ export function registerCommands(
   };
   context.subscriptions.push({ dispose: () => { if (timer) clearTimeout(timer); } });
 
+  // VSCode discards rejected/thrown command callbacks without telling the user,
+  // so a failed write (disk full, read-only .review, lost mount) would lose the
+  // comment silently. Wrap every handler to surface failures.
   const reg = (id: string, fn: (...args: any[]) => any) =>
-    context.subscriptions.push(vscode.commands.registerCommand(id, fn));
+    context.subscriptions.push(
+      vscode.commands.registerCommand(id, async (...args: any[]) => {
+        try {
+          return await fn(...args);
+        } catch (err) {
+          vscode.window.showErrorMessage(`Code Review: ${id} failed — ${errMessage(err)}`);
+        }
+      }),
+    );
 
   // Ensure a review is active. When none is active but others exist, let the
   // user activate an existing one or create a new one; with no reviews at all,
@@ -97,8 +125,10 @@ export function registerCommands(
     const sel = editor.selection;
     const startLine = sel.start.line;
     const endLine = sel.isEmpty ? sel.start.line : sel.end.line;
-    const snapshot = editor.document.getText(
-      new vscode.Range(startLine, 0, endLine, editor.document.lineAt(endLine).text.length),
+    const snapshot = normalizeSnapshot(
+      editor.document.getText(
+        new vscode.Range(startLine, 0, endLine, editor.document.lineAt(endLine).text.length),
+      ),
     );
     service.apply({
       op: 'add_thread',
@@ -127,8 +157,8 @@ export function registerCommands(
     const range = reply.thread.range ?? new vscode.Range(0, 0, 0, 0);
     const startLine = range.start.line;
     const endLine = range.end.line;
-    const snapshot = doc.getText(
-      new vscode.Range(startLine, 0, endLine, doc.lineAt(endLine).text.length),
+    const snapshot = normalizeSnapshot(
+      doc.getText(new vscode.Range(startLine, 0, endLine, doc.lineAt(endLine).text.length)),
     );
     service.apply({
       op: 'add_thread',

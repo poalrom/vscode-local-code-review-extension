@@ -6,11 +6,17 @@ export type AnchorResult =
   | { kind: 'outdated' };
 
 export function anchor(docLines: string[], range: LineRange, snapshot: string): AnchorResult {
-  const snapLines = snapshot.split('\n');
+  // Normalize line endings so matching works regardless of CRLF vs LF: callers
+  // split doc text on '\n', which leaves a trailing '\r' on CRLF files.
+  docLines = docLines.map(stripCr);
+  const snapLines = snapshot.split('\n').map(stripCr);
   const height = snapLines.length;
 
+  // Derive endLine from the snapshot height, not the stored range. The snapshot
+  // is authoritative, so an exact match must report the same height a relocated
+  // match would — otherwise the two paths can return different endLine values.
   if (matchesAt(docLines, range.startLine - 1, snapLines)) {
-    return { kind: 'exact', range };
+    return { kind: 'exact', range: { startLine: range.startLine, endLine: range.startLine + height - 1 } };
   }
 
   const matches: number[] = [];
@@ -28,6 +34,10 @@ export function anchor(docLines: string[], range: LineRange, snapshot: string): 
   }
 
   return { kind: 'outdated' };
+}
+
+function stripCr(line: string): string {
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
 }
 
 function matchesAt(docLines: string[], start: number, snapLines: string[]): boolean {

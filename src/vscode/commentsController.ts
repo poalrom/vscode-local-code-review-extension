@@ -48,7 +48,11 @@ export class CommentsUI {
       const rel = vscode.workspace.asRelativePath(doc.uri, false);
       const lines = doc.getText().split('\n');
       for (const t of view.threads) {
-        if (t.file === rel) desired.set(t.id, { uri: doc.uri, lines, t });
+        // Resolved threads are dropped from the editor/Comments UI entirely;
+        // they remain visible (and reopenable) in the review tree panel.
+        if (t.file === rel && t.status !== 'resolved') {
+          desired.set(t.id, { uri: doc.uri, lines, t });
+        }
       }
     }
 

@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { ReviewService } from './reviewService';
+import { anchor } from '../core/anchor';
+import { Thread } from '../core/types';
 
 export type Node =
   | { kind: 'review'; name: string }
-  | { kind: 'thread'; review: string; threadId: string; label: string; file: string; line: number; status: 'open' | 'resolved' }
+  | { kind: 'thread'; review: string; threadId: string; label: string; file: string; line: number; status: 'open' | 'resolved'; outdated: boolean }
   | { kind: 'comment'; label: string };
 
 export class ReviewTree implements vscode.TreeDataProvider<Node> {
@@ -47,7 +49,13 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
       item.id = `thread/${this.threadGen}/${node.review}/${node.threadId}`;
       item.contextValue = node.status === 'resolved' ? 'thread-resolved' : 'thread-open';
-      item.description = `${node.file}:${node.line}`;
+      item.description = `${node.file}:${node.line}${node.outdated ? ' [outdated]' : ''}`;
+      if (node.outdated) {
+        item.iconPath = new vscode.ThemeIcon(
+          'warning',
+          new vscode.ThemeColor('list.warningForeground'),
+        );
+      }
       const root = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (root) {
         item.command = {
@@ -69,15 +77,19 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
       return this.service.list().map((name) => ({ kind: 'review', name }));
     }
     if (node.kind === 'review') {
-      return this.service.view(node.name).threads.map((t) => ({
-        kind: 'thread',
-        review: node.name,
-        threadId: t.id,
-        label: `${t.status === 'resolved' ? '✓' : '○'} ${t.comments[0]?.body ?? '(empty)'}`,
-        file: t.file,
-        line: t.range.startLine,
-        status: t.status,
-      }));
+      return this.service.view(node.name).threads.map((t) => {
+        const placed = this.locate(t);
+        return {
+          kind: 'thread',
+          review: node.name,
+          threadId: t.id,
+          label: `${t.status === 'resolved' ? '✓' : '○'} ${t.comments[0]?.body ?? '(empty)'}`,
+          file: t.file,
+          line: placed.line,
+          status: t.status,
+          outdated: placed.outdated,
+        };
+      });
     }
     if (node.kind === 'thread') {
       const review = this.service.view(node.review);
@@ -88,5 +100,20 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
       }));
     }
     return [];
+  }
+
+  // Re-anchor the thread against the open document's current text so the tree's
+  // line matches the editor. Falls back to the stored line when the file isn't
+  // open or the snapshot can no longer be found (outdated). `outdated` is only
+  // known when the file is open — otherwise we can't tell, so it stays false.
+  private locate(t: Thread): { line: number; outdated: boolean } {
+    const doc = vscode.workspace.textDocuments.find(
+      (d) => vscode.workspace.asRelativePath(d.uri, false) === t.file,
+    );
+    if (!doc) return { line: t.range.startLine, outdated: false };
+    const located = anchor(doc.getText().split('\n'), t.range, t.snapshot);
+    return located.kind === 'outdated'
+      ? { line: t.range.startLine, outdated: true }
+      : { line: located.range.startLine, outdated: false };
   }
 }

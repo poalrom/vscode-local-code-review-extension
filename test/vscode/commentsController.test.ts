@@ -57,13 +57,28 @@ describe('CommentsUI.render', () => {
   it('updates a changed thread in place without recreating it', () => {
     const ui = new CommentsUI();
     ui.render(view([openThread()]));
-    const resolved = openThread({ status: 'resolved' });
-    ui.render(view([resolved]));
+    const edited = openThread({
+      comments: [{ id: 't1.c1', author: 'reviewer', body: 'edited', createdAt: '2026-06-16T00:00:00.000Z' }],
+    });
+    ui.render(view([edited]));
 
     expect(mock.state.createdThreads.length).toBe(1);
-    expect(mock.state.createdThreads[0].label).toContain('Resolved');
-    expect(mock.state.createdThreads[0].collapsibleState).toBe(
-      mock.CommentThreadCollapsibleState.Collapsed,
-    );
+    expect(alive().length).toBe(1);
+    expect(mock.state.createdThreads[0].disposed).toBe(false);
+  });
+
+  it('disposes a thread once it is resolved (hidden from the comments UI)', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread()]));
+    expect(alive().length).toBe(1);
+
+    ui.render(view([openThread({ status: 'resolved' })]));
+    expect(alive().length).toBe(0);
+  });
+
+  it('never creates a widget for an already-resolved thread', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread({ status: 'resolved' })]));
+    expect(mock.state.createdThreads.length).toBe(0);
   });
 });

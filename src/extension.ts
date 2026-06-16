@@ -34,6 +34,32 @@ export function activate(context: vscode.ExtensionContext): void {
   watcher.onDidDelete(rerender);
   context.subscriptions.push(watcher);
 
+  // Watch the .review directory itself: deleting the whole folder doesn't
+  // reliably emit per-file delete events for the log watcher above. Create/
+  // delete only — ignore change events so the extension's own view/state
+  // writes inside the folder don't trigger a render loop.
+  const dirWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(folder, '.review'),
+    false,
+    true,
+    false,
+  );
+  dirWatcher.onDidCreate(rerender);
+  dirWatcher.onDidDelete(rerender);
+  context.subscriptions.push(dirWatcher);
+
+  // view.json is a derived snapshot the extension owns. If the user deletes it
+  // by hand, regenerate it. Delete-only: the extension's own atomic writes
+  // surface as change/create events (ignored here), so this can't self-loop.
+  const viewWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(folder, '.review/*.view.json'),
+    true,
+    true,
+    false,
+  );
+  viewWatcher.onDidDelete(rerender);
+  context.subscriptions.push(viewWatcher);
+
   rerender();
 }
 

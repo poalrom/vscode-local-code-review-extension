@@ -18,6 +18,13 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
   // Collapsed state wins and threads come back collapsed.
   private threadGen = 0;
 
+  // Generation baked into review ids. Bumping it gives every review a fresh id,
+  // so VSCode drops its persisted expansion state and the provided Collapsed/
+  // Expanded default wins. Bumped when the active review changes so the newly
+  // active one expands (and the rest collapse) on the next render.
+  private reviewGen = 0;
+  private lastActive: string | null = null;
+
   constructor(private readonly service: ReviewService) {}
 
   refresh(): void {
@@ -38,10 +45,18 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
   getTreeItem(node: Node): vscode.TreeItem {
     if (node.kind === 'review') {
       const active = this.service.active() === node.name;
-      const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.Expanded);
+      // First render: only the active review starts expanded; the rest collapse.
+      // VSCode persists later user toggles by the stable id below.
+      const item = new vscode.TreeItem(
+        node.name,
+        active
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.Collapsed,
+      );
       item.label = (active ? '● ' : '') + node.name;
-      // Stable id so VSCode keeps the user's expand/collapse choice for reviews.
-      item.id = `review/${node.name}`;
+      // Generation-tagged id: stable across plain refreshes (VSCode keeps the
+      // user's expand/collapse choice), reset when the active review changes.
+      item.id = `review/${this.reviewGen}/${node.name}`;
       item.contextValue = 'review';
       return item;
     }
@@ -74,7 +89,17 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
 
   getChildren(node?: Node): Node[] {
     if (!node) {
-      return this.service.list().map((name) => ({ kind: 'review', name }));
+      const active = this.service.active();
+      // Active changed: refresh review ids so the new active review expands.
+      if (active !== this.lastActive) {
+        this.reviewGen++;
+        this.lastActive = active;
+      }
+      const names = this.service.list();
+      const ordered = active
+        ? [active, ...names.filter((n) => n !== active)]
+        : names;
+      return ordered.map((name) => ({ kind: 'review', name }));
     }
     if (node.kind === 'review') {
       return this.service.view(node.name).threads.map((t) => {

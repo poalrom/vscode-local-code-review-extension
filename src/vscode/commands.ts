@@ -145,17 +145,32 @@ export function registerCommands(
     scheduleRender();
   });
 
-  reg('review.resolve', (thread: vscode.CommentThread) => {
-    const threadId = ui.threadIdFor(thread);
-    if (!threadId) return;
-    service.apply({ op: 'resolve', thread: threadId, ts: nowIso() });
+  reg('review.makeActive', (node?: { name?: string }) => {
+    if (!node?.name) return;
+    service.setActive(node.name);
     scheduleRender();
   });
 
-  reg('review.reopen', (thread: vscode.CommentThread) => {
-    const threadId = ui.threadIdFor(thread);
-    if (!threadId) return;
-    service.apply({ op: 'reopen', thread: threadId, ts: nowIso() });
+  // Both the comment widget (passes a CommentThread, always the active review)
+  // and the tree panel context menu (passes a tree node carrying threadId and
+  // its review name, which may be inactive) route here.
+  const targetFrom = (arg: any): { threadId: string; review?: string } | undefined => {
+    if (typeof arg?.threadId === 'string') return { threadId: arg.threadId, review: arg.review };
+    const threadId = ui.threadIdFor(arg);
+    return threadId ? { threadId } : undefined;
+  };
+
+  reg('review.resolve', (arg: any) => {
+    const t = targetFrom(arg);
+    if (!t) return;
+    service.apply({ op: 'resolve', thread: t.threadId, ts: nowIso() }, t.review);
+    scheduleRender();
+  });
+
+  reg('review.reopen', (arg: any) => {
+    const t = targetFrom(arg);
+    if (!t) return;
+    service.apply({ op: 'reopen', thread: t.threadId, ts: nowIso() }, t.review);
     scheduleRender();
   });
 }

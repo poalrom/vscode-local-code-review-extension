@@ -15,7 +15,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new ReviewTree(service);
 
   context.subscriptions.push(ui);
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('reviewTree', tree));
+  const treeView = vscode.window.createTreeView('reviewTree', { treeDataProvider: tree });
+  treeView.onDidCollapseElement((e) => tree.onElementCollapsed(e.element));
+  treeView.onDidExpandElement((e) => tree.onElementExpanded(e.element));
+  context.subscriptions.push(treeView);
 
   registerCommands(context, service, ui, tree);
 

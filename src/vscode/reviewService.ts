@@ -63,9 +63,11 @@ export class ReviewService {
     return v;
   }
 
-  // Append an event to the active review, rebuild + persist the view, return it.
-  apply(event: ReviewEvent): ReviewView {
-    const name = this.active();
+  // Append an event to a review (defaults to the active one), rebuild + persist
+  // its view, return it. Pass `target` to act on a non-active review, e.g. from
+  // the tree panel context menu.
+  apply(event: ReviewEvent, target?: string): ReviewView {
+    const name = target ?? this.active();
     if (!name) throw new Error('No active review. Create one first.');
     storage.appendEvent(this.dir, name, event);
     const v = this.view(name);

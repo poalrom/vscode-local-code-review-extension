@@ -76,6 +76,7 @@ export class CommentsUI {
           t.comments.map((c) => this.toComment(c.author, c.body)),
         );
         vsThread.label = r.label;
+        vsThread.contextValue = t.status;
         vsThread.collapsibleState = collapsibleFor(t.status);
         this.bound.push({ vsThread, threadId: id, sig, status: t.status });
         continue;
@@ -86,6 +87,7 @@ export class CommentsUI {
 
       existing.vsThread.range = range;
       existing.vsThread.label = r.label;
+      existing.vsThread.contextValue = t.status;
       existing.vsThread.comments = t.comments.map((c) => this.toComment(c.author, c.body));
       // Only override the user's collapse state when the status itself flips.
       if (existing.status !== t.status) {

@@ -10,8 +10,9 @@
   "activationEvents": ["onStartupFinished"],
   "contributes": {
     "commands": [
-      { "command": "review.newReview", "title": "Code Review: New Review" },
+      { "command": "review.newReview", "title": "Code Review: New Review", "icon": "$(add)" },
       { "command": "review.switchActive", "title": "Code Review: Switch Active Review" },
+      { "command": "review.makeActive", "title": "Make Active" },
       { "command": "review.deleteReview", "title": "Code Review: Delete Review" },
       { "command": "review.addComment", "title": "Code Review: Add Comment" },
       { "command": "review.refresh", "title": "Code Review: Refresh", "icon": "$(refresh)" },
@@ -41,8 +42,13 @@
         { "command": "review.replySubmit", "group": "inline" }
       ],
       "comments/commentThread/title": [
-        { "command": "review.resolve", "group": "navigation" },
-        { "command": "review.reopen", "group": "navigation" }
+        { "command": "review.resolve", "when": "commentThread == open", "group": "navigation" },
+        { "command": "review.reopen", "when": "commentThread == resolved", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "review.makeActive", "when": "view == reviewTree && viewItem == review", "group": "navigation" },
+        { "command": "review.resolve", "when": "view == reviewTree && viewItem == thread-open", "group": "navigation" },
+        { "command": "review.reopen", "when": "view == reviewTree && viewItem == thread-resolved", "group": "navigation" }
       ]
     }
   },

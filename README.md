@@ -1,4 +1,4 @@
-# Local Code Review
+# CodeReview.json
 
 A VSCode extension for GitHub-style code review, **on your machine**, with the
 output stored as structured JSON that AI coding agents can read and act on.

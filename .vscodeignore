@@ -7,3 +7,12 @@ esbuild.js
 vitest.config.ts
 tsconfig.json
 **/*.map
+.git/**
+.gitignore
+.vscodeignore
+*.vsix
+AGENTS.md
+SW_ZEN.md
+.claude/**
+.review/**
+package-lock.json

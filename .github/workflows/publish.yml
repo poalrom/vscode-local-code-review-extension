@@ -25,11 +25,11 @@ jobs:
         run: npx vsce package --out extension.vsix
 
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish --packagePath extension.vsix
+        run: npx vsce publish --packagePath extension.vsix --skip-duplicate
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to Open VSX
-        run: npx ovsx publish extension.vsix
+        run: npx ovsx publish extension.vsix --skip-duplicate
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}

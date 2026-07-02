@@ -112,6 +112,29 @@ describe('CommentsUI.render', () => {
   });
 });
 
+describe('CommentsUI.expandThread', () => {
+  beforeEach(() => {
+    mock.__reset();
+    mock.state.textDocuments = [doc('a.ts', 'l1\nl2\nl3\nl4\nl5\n')];
+  });
+
+  it('forces a collapsed widget open', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread()]));
+    const widget = alive()[0];
+    widget.collapsibleState = mock.CommentThreadCollapsibleState.Collapsed;
+
+    ui.expandThread('t1');
+    expect(widget.collapsibleState).toBe(mock.CommentThreadCollapsibleState.Expanded);
+  });
+
+  it('is a no-op for a thread without a widget', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread()]));
+    expect(() => ui.expandThread('nope')).not.toThrow();
+  });
+});
+
 describe('CommentsUI comment editing', () => {
   beforeEach(() => {
     mock.__reset();

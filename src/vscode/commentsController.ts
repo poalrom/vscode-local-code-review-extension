@@ -139,6 +139,13 @@ export class CommentsUI {
     };
   }
 
+  // Force a rendered thread's widget open (tree-click navigation). No-op when
+  // the thread isn't rendered (resolved, inactive review, or file not open).
+  expandThread(threadId: string): void {
+    const b = this.bound.find((x) => x.threadId === threadId);
+    if (b) b.vsThread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+  }
+
   // Flip a rendered comment into or out of edit mode in place. Editing state is
   // transient UI — it lives on the live widget until the user saves or cancels,
   // and never touches the stored log.

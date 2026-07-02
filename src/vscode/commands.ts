@@ -3,6 +3,7 @@ import { ReviewService, nowIso } from './reviewService';
 import { CommentsUI, RenderedComment } from './commentsController';
 import { ReviewTree } from './treeProvider';
 import { newThreadId } from '../core/ids';
+import { anchor } from '../core/anchor';
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -202,6 +203,56 @@ export function registerCommands(
     if (!t) return;
     service.apply({ op: 'reopen', thread: t.threadId, ts: nowIso() }, t.review);
     scheduleRender();
+  });
+
+  // --- Tree navigation: open a thread's comments in the editor ---
+
+  reg('review.openComment', async (node: { review: string; threadId: string }) => {
+    // Editor widgets only exist for the active review. Don't silently switch
+    // reviews from a navigation click — ask first, then finish the journey.
+    if (node.review !== service.active()) {
+      const activate = `Make review "${node.review}" active`;
+      const pick = await vscode.window.showInformationMessage(
+        `Review "${node.review}" is not active. Activate it to open its comments in the editor.`,
+        activate,
+      );
+      if (pick !== activate) return;
+      service.setActive(node.review);
+      renderNow();
+    }
+
+    const t = service.view(node.review).threads.find((x) => x.id === node.threadId);
+    if (!t) {
+      // Stale tree node: the thread vanished (e.g. agent rewrote the log).
+      vscode.window.showWarningMessage('Code Review: this comment thread no longer exists.');
+      scheduleRender();
+      return;
+    }
+
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) return;
+    let doc: vscode.TextDocument;
+    try {
+      doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, t.file));
+    } catch (err) {
+      vscode.window.showErrorMessage(`Code Review: cannot open ${t.file} — ${errMessage(err)}`);
+      return;
+    }
+
+    // Re-anchor at click time: tree nodes are built at render time, so their
+    // line may be stale after edits. Outdated snapshots fall back to the
+    // stored line, matching the widget's placement.
+    const located = anchor(doc.getText().split('\n'), t.range, t.snapshot);
+    const line = (located.kind === 'outdated' ? t.range.startLine : located.range.startLine) - 1;
+    await vscode.window.showTextDocument(doc, { selection: new vscode.Range(line, 0, line, 0) });
+
+    // Resolved threads have no widget by design — the click just opens the file.
+    if (t.status !== 'resolved') {
+      // Render synchronously so a freshly opened document's widget is bound
+      // before expanding; the debounced open-event render is too late.
+      renderNow();
+      ui.expandThread(t.id);
+    }
   });
 
   // --- Comment editing (reviewer's own comments, comment widget only) ---

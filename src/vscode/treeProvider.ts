@@ -6,7 +6,7 @@ import { Thread } from '../core/types';
 export type Node =
   | { kind: 'review'; name: string }
   | { kind: 'thread'; review: string; threadId: string; label: string; file: string; line: number; status: 'open' | 'resolved'; outdated: boolean }
-  | { kind: 'comment'; label: string };
+  | { kind: 'comment'; review: string; threadId: string; label: string };
 
 export class ReviewTree implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<void>();
@@ -71,20 +71,12 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
           new vscode.ThemeColor('list.warningForeground'),
         );
       }
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-      if (root) {
-        item.command = {
-          command: 'vscode.open',
-          title: 'Open',
-          arguments: [
-            vscode.Uri.joinPath(root, node.file),
-            { selection: new vscode.Range(node.line - 1, 0, node.line - 1, 0) },
-          ],
-        };
-      }
+      item.command = this.command(node);
       return item;
     }
-    return new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+    item.command = this.command(node);
+    return item;
   }
 
   getChildren(node?: Node): Node[] {
@@ -121,6 +113,8 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
       const thread = review.threads.find((t) => t.id === node.threadId);
       return (thread?.comments ?? []).map((c) => ({
         kind: 'comment',
+        review: node.review,
+        threadId: node.threadId,
         label: `${c.author}: ${c.body}`,
       }));
     }
@@ -131,6 +125,17 @@ export class ReviewTree implements vscode.TreeDataProvider<Node> {
   // line matches the editor. Falls back to the stored line when the file isn't
   // open or the snapshot can no longer be found (outdated). `outdated` is only
   // known when the file is open — otherwise we can't tell, so it stays false.
+  // Both thread and comment clicks navigate to the thread in the editor. The
+  // handler re-resolves file/line from stored state at click time, so the node
+  // only needs to say which thread it is.
+  private command(node: { review: string; threadId: string }): vscode.Command {
+    return {
+      command: 'review.openComment',
+      title: 'Open Comment',
+      arguments: [{ review: node.review, threadId: node.threadId }],
+    };
+  }
+
   private locate(t: Thread): { line: number; outdated: boolean } {
     const doc = vscode.workspace.textDocuments.find(
       (d) => vscode.workspace.asRelativePath(d.uri, false) === t.file,

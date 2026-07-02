@@ -111,3 +111,68 @@ describe('CommentsUI.render', () => {
     expect(mock.state.createdThreads.length).toBe(0);
   });
 });
+
+describe('CommentsUI comment editing', () => {
+  beforeEach(() => {
+    mock.__reset();
+    mock.state.textDocuments = [doc('a.ts', 'l1\nl2\nl3\nl4\nl5\n')];
+  });
+
+  const rendered = () => mock.state.createdThreads[0].comments as any[];
+
+  it('marks only the reviewer\'s own comments as editable', () => {
+    const ui = new CommentsUI();
+    ui.render(
+      view([
+        openThread({
+          comments: [
+            { id: 't1.c1', author: 'reviewer', body: 'mine', createdAt: 'x' },
+            { id: 't1.c2', author: 'agent', body: 'theirs', createdAt: 'x' },
+          ],
+        }),
+      ]),
+    );
+    const [own, other] = rendered();
+    expect(own.contextValue).toBe('canEdit');
+    expect(other.contextValue).toBeUndefined();
+    expect(own.commentId).toBe('t1.c1');
+    expect(own.threadId).toBe('t1');
+  });
+
+  it('shows an (edited) label only on edited comments', () => {
+    const ui = new CommentsUI();
+    ui.render(
+      view([
+        openThread({
+          comments: [
+            { id: 't1.c1', author: 'reviewer', body: 'v2', createdAt: 'x', editedAt: 'y' },
+          ],
+        }),
+      ]),
+    );
+    expect(rendered()[0].label).toBe('(edited)');
+
+    ui.render(view([openThread()]));
+    expect(rendered()[0].label).toBeUndefined();
+  });
+
+  it('flips a comment into edit mode in place', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread()]));
+    ui.setCommentMode(rendered()[0], mock.CommentMode.Editing);
+    expect(rendered()[0].mode).toBe(mock.CommentMode.Editing);
+  });
+
+  it('restores the stored body in preview when an edit is cancelled', () => {
+    const ui = new CommentsUI();
+    ui.render(view([openThread()]));
+    const c = rendered()[0];
+    ui.setCommentMode(c, mock.CommentMode.Editing);
+    // Simulate the user typing before cancelling.
+    c.body = new mock.MarkdownString('half-typed change');
+
+    ui.resetThread(openThread());
+    expect(rendered()[0].mode).toBe(mock.CommentMode.Preview);
+    expect((rendered()[0].body as { value: string }).value).toBe('qwe');
+  });
+});

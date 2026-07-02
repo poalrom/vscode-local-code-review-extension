@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ReviewView, Thread, ThreadStatus } from '../core/types';
+import { Comment, ReviewView, Thread, ThreadStatus } from '../core/types';
 import { anchor } from '../core/anchor';
 
 // Maps a VSCode comment thread back to our thread id so command handlers
@@ -14,6 +14,13 @@ export interface BoundThread {
   // Whether the thread last rendered as outdated (snapshot not found). A flip in
   // this flag is the only transition that forces a dispose+recreate.
   outdated: boolean;
+}
+
+// A rendered VSCode comment carries our own ids so edit handlers can map it
+// back to the stored comment without relying on array position.
+export interface RenderedComment extends vscode.Comment {
+  commentId: string;
+  threadId: string;
 }
 
 export class CommentsUI {
@@ -71,7 +78,7 @@ export class CommentsUI {
       const sig = JSON.stringify({
         line: [r.startLine, r.endLine],
         label: r.label,
-        comments: t.comments.map((c) => [c.author, c.body]),
+        comments: t.comments.map((c) => [c.author, c.body, c.editedAt]),
       });
       const range = new vscode.Range(r.startLine, 0, r.endLine, 0);
       const existing = this.bound.find((b) => b.threadId === id);
@@ -90,7 +97,7 @@ export class CommentsUI {
         existing.vsThread.range = range;
         existing.vsThread.label = r.label;
         existing.vsThread.contextValue = t.status;
-        existing.vsThread.comments = t.comments.map((c) => this.toComment(c.author, c.body));
+        existing.vsThread.comments = t.comments.map((c) => this.toComment(t.id, c));
         if (existing.status !== t.status) {
           existing.vsThread.collapsibleState = collapsibleFor(t.status);
         }
@@ -107,7 +114,7 @@ export class CommentsUI {
       const vsThread = this.controller.createCommentThread(
         uri,
         range,
-        t.comments.map((c) => this.toComment(c.author, c.body)),
+        t.comments.map((c) => this.toComment(t.id, c)),
       );
       vsThread.label = r.label;
       vsThread.contextValue = t.status;
@@ -132,11 +139,37 @@ export class CommentsUI {
     };
   }
 
-  private toComment(author: string, body: string): vscode.Comment {
+  // Flip a rendered comment into or out of edit mode in place. Editing state is
+  // transient UI — it lives on the live widget until the user saves or cancels,
+  // and never touches the stored log.
+  setCommentMode(c: RenderedComment, mode: vscode.CommentMode): void {
+    const b = this.bound.find((x) => x.threadId === c.threadId);
+    if (!b) return;
+    b.vsThread.comments = b.vsThread.comments.map((vc) =>
+      (vc as RenderedComment).commentId === c.commentId ? { ...vc, mode } : vc,
+    );
+  }
+
+  // Rebuild one thread's comments from stored state, dropping any edit-mode
+  // widget. Used to cancel an edit (or discard an empty save) so the original
+  // body reappears in preview — render()'s signature check would otherwise skip
+  // this rethread when nothing in the stored view changed.
+  resetThread(t: Thread): void {
+    const b = this.bound.find((x) => x.threadId === t.id);
+    if (b) b.vsThread.comments = t.comments.map((c) => this.toComment(t.id, c));
+  }
+
+  private toComment(threadId: string, c: Comment): RenderedComment {
     return {
-      author: { name: author },
-      body: new vscode.MarkdownString(body),
+      commentId: c.id,
+      threadId,
+      author: { name: c.author },
+      body: new vscode.MarkdownString(c.body),
       mode: vscode.CommentMode.Preview,
+      // Gates the edit pencil to the reviewer's own comments (package.json menu).
+      contextValue: c.author === 'reviewer' ? 'canEdit' : undefined,
+      // Shown beside the author; keeps the marker out of the editable body.
+      label: c.editedAt ? '(edited)' : undefined,
     };
   }
 }

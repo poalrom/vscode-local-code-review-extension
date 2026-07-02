@@ -58,4 +58,47 @@ describe('fold', () => {
     const v = fold('rev', []);
     expect(v).toEqual({ version: 1, name: 'rev', createdAt: '', threads: [] });
   });
+
+  it('edits a comment body and marks it edited', () => {
+    const v = fold('rev', [
+      add,
+      { op: 'edit_comment', comment: 't_1.c1', body: 'fix this properly', ts: '2026-06-15T12:00:00Z' },
+    ]);
+    const c = v.threads[0].comments[0];
+    expect(c.body).toBe('fix this properly');
+    expect(c.editedAt).toBe('2026-06-15T12:00:00Z');
+    expect(c.createdAt).toBe('2026-06-15T10:00:00Z');
+  });
+
+  it('ignores edits referencing an unknown thread or comment', () => {
+    const v = fold('rev', [
+      add,
+      { op: 'edit_comment', comment: 'ghost.c1', body: 'x', ts: 't' },
+      { op: 'edit_comment', comment: 't_1.c9', body: 'y', ts: 't' },
+    ]);
+    expect(v.threads[0].comments[0].body).toBe('fix this');
+    expect(v.threads[0].comments[0].editedAt).toBeUndefined();
+  });
+
+  it('applies the last edit when a comment is edited more than once', () => {
+    const v = fold('rev', [
+      add,
+      { op: 'edit_comment', comment: 't_1.c1', body: 'first', ts: '2026-06-15T12:00:00Z' },
+      { op: 'edit_comment', comment: 't_1.c1', body: 'second', ts: '2026-06-15T13:00:00Z' },
+    ]);
+    expect(v.threads[0].comments[0].body).toBe('second');
+    expect(v.threads[0].comments[0].editedAt).toBe('2026-06-15T13:00:00Z');
+  });
+
+  it('leaves sibling comments untouched when one is edited', () => {
+    const v = fold('rev', [
+      add,
+      { op: 'reply', thread: 't_1', author: 'agent', body: 'done', ts: '2026-06-15T10:05:00Z' },
+      { op: 'edit_comment', comment: 't_1.c1', body: 'edited opener', ts: '2026-06-15T12:00:00Z' },
+    ]);
+    expect(v.threads[0].comments[0].body).toBe('edited opener');
+    expect(v.threads[0].comments[1]).toEqual({
+      id: 't_1.c2', author: 'agent', body: 'done', createdAt: '2026-06-15T10:05:00Z',
+    });
+  });
 });

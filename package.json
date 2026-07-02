@@ -29,7 +29,10 @@
       { "command": "review.refresh", "title": "Code Review: Refresh", "icon": "$(refresh)" },
       { "command": "review.replySubmit", "title": "Reply" },
       { "command": "review.resolve", "title": "Resolve", "icon": "$(check)" },
-      { "command": "review.reopen", "title": "Reopen", "icon": "$(history)" }
+      { "command": "review.reopen", "title": "Reopen", "icon": "$(history)" },
+      { "command": "review.editComment", "title": "Edit", "icon": "$(edit)" },
+      { "command": "review.editCommentSave", "title": "Save" },
+      { "command": "review.editCommentCancel", "title": "Cancel" }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -55,6 +58,13 @@
       "comments/commentThread/title": [
         { "command": "review.resolve", "when": "commentThread == open", "group": "navigation" },
         { "command": "review.reopen", "when": "commentThread == resolved", "group": "navigation" }
+      ],
+      "comments/comment/title": [
+        { "command": "review.editComment", "when": "comment == canEdit", "group": "inline@1" }
+      ],
+      "comments/comment/context": [
+        { "command": "review.editCommentSave", "when": "comment == canEdit", "group": "inline@1" },
+        { "command": "review.editCommentCancel", "when": "comment == canEdit", "group": "inline@2" }
       ],
       "view/item/context": [
         { "command": "review.makeActive", "when": "view == reviewTree && viewItem == review", "group": "navigation" },

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ReviewService, nowIso } from './reviewService';
-import { CommentsUI } from './commentsController';
+import { CommentsUI, RenderedComment } from './commentsController';
 import { ReviewTree } from './treeProvider';
 import { newThreadId } from '../core/ids';
 
@@ -201,6 +201,37 @@ export function registerCommands(
     const t = targetFrom(arg);
     if (!t) return;
     service.apply({ op: 'reopen', thread: t.threadId, ts: nowIso() }, t.review);
+    scheduleRender();
+  });
+
+  // --- Comment editing (reviewer's own comments, comment widget only) ---
+
+  const bodyText = (b: string | vscode.MarkdownString): string =>
+    typeof b === 'string' ? b : b.value;
+
+  // Discard an in-progress edit: rebuild the thread from stored state so the
+  // original body reappears in preview.
+  const cancelEdit = (c: RenderedComment) => {
+    const name = service.active();
+    if (!name) return;
+    const t = service.view(name).threads.find((x) => x.id === c.threadId);
+    if (t) ui.resetThread(t);
+  };
+
+  reg('review.editComment', (c: RenderedComment) =>
+    ui.setCommentMode(c, vscode.CommentMode.Editing),
+  );
+
+  reg('review.editCommentCancel', (c: RenderedComment) => cancelEdit(c));
+
+  reg('review.editCommentSave', (c: RenderedComment) => {
+    const body = bodyText(c.body).trim();
+    // Empty save is a no-op: restore the original rather than store a blank.
+    if (!body) {
+      cancelEdit(c);
+      return;
+    }
+    service.apply({ op: 'edit_comment', comment: c.commentId, body, ts: nowIso() });
     scheduleRender();
   });
 }

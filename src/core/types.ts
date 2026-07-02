@@ -11,6 +11,7 @@ export interface Comment {
   author: string; // 'reviewer' | 'agent' by convention
   body: string;
   createdAt: string; // ISO-8601 UTC
+  editedAt?: string; // ISO-8601 UTC, set when the body was edited
 }
 
 export interface Thread {
@@ -61,4 +62,19 @@ export interface ReopenEvent {
   ts: string;
 }
 
-export type ReviewEvent = AddThreadEvent | ReplyEvent | ResolveEvent | ReopenEvent;
+// Edits a comment's body only. Targets the comment by its full id
+// (`<thread>.c<N>`); the thread is derived from that id. Carries no author —
+// editing never changes who wrote the comment.
+export interface EditCommentEvent {
+  op: 'edit_comment';
+  comment: string; // full comment id, e.g. 't_1.c2'
+  body: string;
+  ts: string;
+}
+
+export type ReviewEvent =
+  | AddThreadEvent
+  | ReplyEvent
+  | ResolveEvent
+  | ReopenEvent
+  | EditCommentEvent;

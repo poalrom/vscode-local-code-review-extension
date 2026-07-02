@@ -47,6 +47,18 @@ export function fold(name: string, events: ReviewEvent[]): ReviewView {
         if (t) byId.set(t.id, { ...t, status: 'open' });
         break;
       }
+      case 'edit_comment': {
+        // The comment id is `<thread>.c<N>`; derive the thread from it.
+        const threadId = e.comment.slice(0, e.comment.lastIndexOf('.c'));
+        const t = byId.get(threadId);
+        if (!t) break;
+        const idx = t.comments.findIndex((c) => c.id === e.comment);
+        if (idx === -1) break;
+        const comments = t.comments.slice();
+        comments[idx] = { ...comments[idx], body: e.body, editedAt: e.ts };
+        byId.set(t.id, { ...t, comments });
+        break;
+      }
     }
   }
 

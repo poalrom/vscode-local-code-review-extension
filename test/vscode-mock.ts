@@ -33,20 +33,41 @@ export interface MockThread {
   dispose(): void;
 }
 
+export interface MockDocument {
+  uri: { _rel: string };
+  getText(): string;
+}
+
 export const state: {
   createdThreads: MockThread[];
   controllerDisposed: boolean;
-  textDocuments: Array<{ uri: { _rel: string }; getText(): string }>;
+  textDocuments: MockDocument[];
+  workspaceFolders: Array<{ uri: { _rel: string } }>;
+  messages: Array<{ severity: 'info' | 'warning' | 'error'; message: string; items: string[] }>;
+  // Scripted reply for the next message with action buttons (undefined = dismiss).
+  messageResponse: (message: string, items: string[]) => string | undefined;
+  shownDocuments: Array<{ doc: MockDocument; options?: { selection?: Range } }>;
+  commandRegistry: Map<string, (...args: unknown[]) => unknown>;
 } = {
   createdThreads: [],
   controllerDisposed: false,
   textDocuments: [],
+  workspaceFolders: [],
+  messages: [],
+  messageResponse: () => undefined,
+  shownDocuments: [],
+  commandRegistry: new Map(),
 };
 
 export function __reset(): void {
   state.createdThreads = [];
   state.controllerDisposed = false;
   state.textDocuments = [];
+  state.workspaceFolders = [{ uri: { _rel: '' } }];
+  state.messages = [];
+  state.messageResponse = () => undefined;
+  state.shownDocuments = [];
+  state.commandRegistry = new Map();
 }
 
 export const comments = {
@@ -77,7 +98,94 @@ export const workspace = {
   get textDocuments() {
     return state.textDocuments;
   },
+  get workspaceFolders() {
+    return state.workspaceFolders;
+  },
   asRelativePath(uri: { _rel: string }) {
     return uri._rel;
   },
+  // Mock semantics: only documents in state.textDocuments "exist on disk".
+  async openTextDocument(uri: { _rel: string }): Promise<MockDocument> {
+    const doc = state.textDocuments.find((d) => d.uri._rel === uri._rel);
+    if (!doc) throw new Error(`cannot open file ${uri._rel}`);
+    return doc;
+  },
 };
+
+const pushMessage = (
+  severity: 'info' | 'warning' | 'error',
+  message: string,
+  items: string[],
+): Promise<string | undefined> => {
+  state.messages.push({ severity, message, items });
+  return Promise.resolve(state.messageResponse(message, items));
+};
+
+export const window = {
+  showInformationMessage: (message: string, ...items: string[]) =>
+    pushMessage('info', message, items),
+  showWarningMessage: (message: string, ...items: string[]) =>
+    pushMessage('warning', message, items),
+  showErrorMessage: (message: string, ...items: string[]) =>
+    pushMessage('error', message, items),
+  async showTextDocument(doc: MockDocument, options?: { selection?: Range }): Promise<void> {
+    state.shownDocuments.push({ doc, options });
+  },
+};
+
+export const commands = {
+  registerCommand(id: string, fn: (...args: unknown[]) => unknown) {
+    state.commandRegistry.set(id, fn);
+    return { dispose() {} };
+  },
+  async executeCommand(id: string, ...args: unknown[]): Promise<unknown> {
+    const fn = state.commandRegistry.get(id);
+    if (!fn) throw new Error(`command not registered: ${id}`);
+    return fn(...args);
+  },
+};
+
+export const Uri = {
+  joinPath(_base: { _rel: string }, ...parts: string[]) {
+    return { _rel: parts.join('/') };
+  },
+};
+
+export class EventEmitter<T = void> {
+  private listeners: Array<(e: T) => void> = [];
+  event = (fn: (e: T) => void) => {
+    this.listeners.push(fn);
+    return { dispose() {} };
+  };
+  fire(e: T): void {
+    for (const fn of this.listeners) fn(e);
+  }
+}
+
+export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 } as const;
+
+export class TreeItem {
+  id?: string;
+  label: string;
+  description?: string;
+  contextValue?: string;
+  iconPath?: unknown;
+  command?: { command: string; title: string; arguments?: unknown[] };
+  constructor(
+    label: string,
+    public collapsibleState: number = TreeItemCollapsibleState.None,
+  ) {
+    this.label = label;
+  }
+}
+
+export class ThemeIcon {
+  constructor(
+    public readonly id: string,
+    public readonly color?: unknown,
+  ) {}
+}
+
+export class ThemeColor {
+  constructor(public readonly id: string) {}
+}

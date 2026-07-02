@@ -33,3 +33,17 @@ is a workspace JSON that AI agents read and resolve.
   extension is the sole writer of `<name>.view.json`. All writes (UI and agent)
   append events — never rewrite shared state.
 - TDD for core modules. 1-based line ranges. ISO-8601 UTC timestamps via `nowIso()`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`gh` CLI); external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical vocabulary, no overrides: needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context (`CONTEXT.md` + `docs/adr/` at root). See `docs/agents/domain.md`.

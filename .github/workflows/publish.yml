@@ -1,0 +1,35 @@
+name: Publish extension
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test & typecheck
+        run: |
+          npm test
+          npm run compile
+
+      - name: Package
+        run: npx vsce package --out extension.vsix
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --packagePath extension.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        run: npx ovsx publish extension.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

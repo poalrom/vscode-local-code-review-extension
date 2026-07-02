@@ -2,7 +2,7 @@
   "name": "codereview-json",
   "displayName": "CodeReview.json",
   "description": "GitHub-style local code review comments, stored as JSON for AI agents.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "poalrom",
   "license": "MIT",
   "author": "Alex Popkov <poalrom@toloka.ai>",

@@ -74,13 +74,18 @@ log yourself — the log is the source of truth:
 ```bash
 jq -s '
   reduce .[] as $e ({};
-    if $e.op == "add_thread" then .[$e.id] = {id:$e.id, file:$e.file, range:$e.range, snapshot:$e.snapshot, status:"open", comments:[{author:$e.author, body:$e.body}]}
-    elif $e.op == "reply"   then .[$e.thread].comments += [{author:$e.author, body:$e.body}]
+    if $e.op == "add_thread" then .[$e.id] = {id:$e.id, file:$e.file, range:$e.range, snapshot:$e.snapshot, status:"open", comments:[{id:($e.id+".c1"), author:$e.author, body:$e.body}]}
+    elif $e.op == "reply"   then .[$e.thread].comments += [{id:($e.thread+".c"+((.[$e.thread].comments|length+1)|tostring)), author:$e.author, body:$e.body}]
     elif $e.op == "resolve" then .[$e.thread].status = "resolved"
     elif $e.op == "reopen"  then .[$e.thread].status = "open"
+    elif $e.op == "edit_comment" then ($e.comment|sub("\\.c[0-9]+$";"")) as $t
+      | .[$t].comments |= map(if .id == $e.comment then .body = $e.body else . end)
     else . end)
   | to_entries | map(.value)' ".review/$f.log.jsonl"
 ```
+
+The log may also contain `edit_comment` events (the reviewer rewording their
+own comment); the fold above applies them. You never emit them yourself.
 
 ## Rules
 

@@ -79,8 +79,8 @@ the **view** for easy reading. See `docs/superpowers/specs/` for the full design
 ## The agent loop
 
 Agents read `<name>.view.json` and act by appending events to the log — never
-rewriting either file. A Claude Code skill at
-`.claude/skills/review-comments/SKILL.md` documents the `jq` recipes:
+rewriting either file. A bundled agent skill at
+`skills/review-comments/SKILL.md` documents the `jq` recipes:
 
 ```bash
 f=$(jq -r .active .review/state.json)
@@ -95,6 +95,22 @@ printf '%s\n' "$(jq -nc --arg t t_a1 --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 ```
 
 `jq` is required on the agent side.
+
+### Installing the skill in your project
+
+The skill follows the [Agent Skills](https://github.com/vercel-labs/skills)
+layout, so the `skills` CLI can install it into whatever agent you use
+(Claude Code, Cursor, Codex, opencode, …):
+
+```bash
+npx skills add poalrom/vscode-local-code-review-extension
+```
+
+That copies `review-comments` into your project's agent skill directory; the
+agent then knows how to read `.review/` and resolve threads when you ask it to
+"address the review comments". Inside this repo Claude Code picks the skill up
+automatically — `.claude/skills/review-comments` is a symlink to
+`skills/review-comments`.
 
 ## Architecture
 
